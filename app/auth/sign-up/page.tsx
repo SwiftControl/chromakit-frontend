@@ -1,0 +1,243 @@
+"use client"
+
+import type React from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { Icons } from "@/components/ui/icons"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useAuth } from "@/hooks/useAuth"
+import { toast } from "sonner"
+import Image from "next/image"
+
+export default function SignUpPage() {
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
+  const { user, signUp, signInWithGoogle, signInWithFacebook } = useAuth()
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (user) {
+      router.push('/dashboard')
+    }
+  }, [user, router])
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match")
+      setIsLoading(false)
+      return
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters")
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      const { error } = await signUp(email, password)
+      if (error) {
+        toast.error(error.message)
+      } else {
+        toast.success("Check your email to verify your account")
+        router.push("/auth/sign-up-success")
+      }
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "An error occurred")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true)
+    try {
+      const { error } = await signInWithGoogle()
+      if (error) {
+        toast.error(error.message)
+      }
+    } catch (error) {
+      toast.error("Failed to sign in with Google")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFacebookSignIn = async () => {
+    setIsLoading(true)
+    try {
+      const { error } = await signInWithFacebook()
+      if (error) {
+        toast.error(error.message)
+      }
+    } catch (error) {
+      toast.error("Failed to sign in with Facebook")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          {/* Header */}
+          <div className="mb-8 text-center">
+            <Link href="/" className="inline-flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80">
+                <Image src="/icon.png" alt="Chromakit" width={24} height={24} />
+              </div>
+              <span className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Chromakit</span>
+            </Link>
+            <h1 className="text-3xl font-bold tracking-tight">Create your account</h1>
+            <p className="text-muted-foreground mt-2">Start processing images like a pro</p>
+          </div>
+
+          <Card className="border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+            <CardHeader className="space-y-1 pb-4">
+              <CardTitle className="text-xl text-center">Get started with Chromakit</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6">
+                {/* Social Auth Buttons */}
+                <div className="grid gap-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleGoogleSignIn}
+                    disabled={isLoading}
+                    type="button"
+                    className="w-full h-11 border-2 hover:bg-muted/50 transition-colors"
+                  >
+                    {isLoading ? (
+                      <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Icons.google className="mr-2 h-4 w-4" />
+                    )}
+                    Continue with Google
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleFacebookSignIn}
+                    disabled={isLoading}
+                    type="button"
+                    className="w-full h-11 border-2 hover:bg-muted/50 transition-colors"
+                  >
+                    {isLoading ? (
+                      <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Icons.facebook className="mr-2 h-4 w-4" />
+                    )}
+                    Continue with Facebook
+                  </Button>
+                </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <Separator className="w-full" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+
+              {/* Email Sign Up Form */}
+              <form onSubmit={handleSignUp}>
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      type="text"
+                      placeholder="John Doe"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="name@example.com"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Choose a secure password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirm-password">Confirm Password</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      placeholder="Confirm your password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Icons.spinner className="mr-2" />
+                        Creating account...
+                      </>
+                    ) : (
+                      "Create account"
+                    )}
+                  </Button>
+                </div>
+              </form>
+
+              <div className="text-center text-sm text-muted-foreground">
+                Already have an account?{" "}
+                <Link href="/auth/login" className="text-primary underline underline-offset-4 hover:text-primary/80">
+                  Sign in
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Footer */}
+        <div className="mt-8 text-center text-sm text-muted-foreground">
+          <p>By creating an account, you agree to our{" "}
+            <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>
+            {" "}and{" "}
+            <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+          </p>
+        </div>
+      </div>
+      </div>
+    </div>
+  )
+}
