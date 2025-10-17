@@ -9,7 +9,7 @@ import { HistogramPanel } from "./histogram-panel"
 import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
 
-import type { ImageData, EditorState } from "@/lib/types/editor"
+import type { ImageData, EditorState } from "@/types"
 
 interface EditorCanvasProps {
   image: ImageData
@@ -17,9 +17,10 @@ interface EditorCanvasProps {
   currentImageUrl: string | null
   originalImageId: string
   editorState: EditorState
+  isProcessing?: boolean
 }
 
-export function EditorCanvas({ image, currentImageId, currentImageUrl, originalImageId, editorState }: EditorCanvasProps) {
+export function EditorCanvas({ image, currentImageId, currentImageUrl, originalImageId, editorState, isProcessing }: EditorCanvasProps) {
   const showComparison = editorState.compareMode
   const showHistogram = editorState.showHistogram
   const [imageLoaded, setImageLoaded] = useState(false)
@@ -58,11 +59,15 @@ export function EditorCanvas({ image, currentImageId, currentImageUrl, originalI
 
         // Use the URL from API response if available, otherwise build URL from imageId
         if (currentImageUrl) {
-          setDisplayImageUrl(currentImageUrl)
+          // Force a fresh URL by adding timestamp to prevent caching
+          const urlWithTimestamp = `${currentImageUrl}${currentImageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+          setDisplayImageUrl(urlWithTimestamp)
         } else {
           const url = await getAuthenticatedImageUrl(currentImageId)
           if (url) {
-            setDisplayImageUrl(url)
+            // Force a fresh URL by adding timestamp to prevent caching
+            const urlWithTimestamp = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`
+            setDisplayImageUrl(urlWithTimestamp)
           } else {
             setImageError('Failed to load image URL')
           }
@@ -108,22 +113,36 @@ export function EditorCanvas({ image, currentImageId, currentImageUrl, originalI
     className?: string
   }) => {
     const [imgSrc, setImgSrc] = useState<string | null>(null)
+    const [isLoading, setIsLoading] = useState(false)
     
     useEffect(() => {
       if (!src) return
       
+      // Cleanup previous object URL when src changes
+      let isCancelled = false
+      let objectUrl: string | null = null
+      
       const loadImage = async () => {
         try {
+          setIsLoading(true)
+          setImgSrc(null) // Clear previous image while loading
+          
           const { data: { session } } = await supabase.auth.getSession()
           if (!session?.access_token) {
-            onError?.()
+            if (!isCancelled) {
+              onError?.()
+              setIsLoading(false)
+            }
             return
           }
           
-          const response = await fetch(src, {
+          // Remove timestamp from URL for the actual fetch
+          const cleanUrl = src.split('?t=')[0]
+          const response = await fetch(cleanUrl, {
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
             },
+            cache: 'no-store', // Disable caching
           })
           
           if (!response.ok) {
@@ -131,27 +150,40 @@ export function EditorCanvas({ image, currentImageId, currentImageUrl, originalI
           }
           
           const blob = await response.blob()
-          const objectUrl = URL.createObjectURL(blob)
-          setImgSrc(objectUrl)
-          onLoad?.()
+          objectUrl = URL.createObjectURL(blob)
           
-          // Cleanup
-          return () => {
-            URL.revokeObjectURL(objectUrl)
+          if (!isCancelled) {
+            setImgSrc(objectUrl)
+            setIsLoading(false)
+            onLoad?.()
           }
         } catch (error) {
           console.error('Failed to load authenticated image:', error)
-          onError?.()
+          if (!isCancelled) {
+            onError?.()
+            setIsLoading(false)
+          }
         }
       }
       
       loadImage()
+      
+      // Cleanup function
+      return () => {
+        isCancelled = true
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl)
+        }
+      }
     }, [src, onLoad, onError])
     
-    if (!imgSrc) {
+    if (isLoading || !imgSrc) {
       return (
         <div className={`flex items-center justify-center bg-muted/20 ${className || ''}`}>
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            {isLoading && <p className="text-sm text-muted-foreground">Loading image...</p>}
+          </div>
         </div>
       )
     }
@@ -161,7 +193,6 @@ export function EditorCanvas({ image, currentImageId, currentImageUrl, originalI
         src={imgSrc}
         alt={alt}
         className={className}
-        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
       />
     )
   }
@@ -257,7 +288,20 @@ export function EditorCanvas({ image, currentImageId, currentImageUrl, originalI
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      <div className={`flex flex-1 items-center justify-center overflow-auto bg-muted/20 p-8 ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
+      {/* Main Canvas Area */}
+      <div className={`relative flex flex-1 items-center justify-center bg-muted/20 ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
+        {/* Processing Overlay */}
+        {(isProcessing || (!imageLoaded && !imageError)) && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-20">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="text-sm font-medium">
+                {isProcessing ? 'Processing image...' : 'Loading image...'}
+              </p>
+            </div>
+          </div>
+        )}
+        
         {/* Image Controls */}
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
           <Button
@@ -283,46 +327,52 @@ export function EditorCanvas({ image, currentImageId, currentImageUrl, originalI
           </Button>
         </div>
 
-                {showComparison && originalImageId !== currentImageId ? (
-          <div className="flex w-full space-x-4">
-            <div className="flex-1">
-              <h3 className="mb-2 text-sm font-medium">Original</h3>
-              <AuthenticatedImage
-                src={originalImageUrl}
-                alt="Original image"
-                onLoad={() => setOriginalLoaded(true)}
-                onError={() => setImageError('Failed to load original image')}
-                className="w-full"
-              />
+        {/* Image Display */}
+        {showComparison && originalImageId !== currentImageId ? (
+          <div className="flex w-full h-full gap-4 p-8">
+            <div className="flex-1 flex flex-col min-w-0">
+              <h3 className="mb-2 text-sm font-medium text-center">Original</h3>
+              <div className="flex-1 flex items-center justify-center min-h-0">
+                <AuthenticatedImage
+                  src={originalImageUrl}
+                  alt="Original image"
+                  onLoad={() => setOriginalLoaded(true)}
+                  onError={() => setImageError('Failed to load original image')}
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
             </div>
-            <div className="flex-1">
-              <h3 className="mb-2 text-sm font-medium">Current</h3>
-              <AuthenticatedImage
-                src={displayImageUrl}
-                alt={image.original_filename}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageError('Failed to load image')}
-                className="w-full"
-              />
+            <div className="flex-1 flex flex-col min-w-0">
+              <h3 className="mb-2 text-sm font-medium text-center">Current</h3>
+              <div className="flex-1 flex items-center justify-center min-h-0">
+                <AuthenticatedImage
+                  src={displayImageUrl}
+                  alt={image.original_filename}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageError('Failed to load image')}
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-center w-full h-full">
-            <div className="border border-border shadow-lg rounded-lg overflow-hidden bg-white max-h-[80vh] max-w-[80vw]">
-              <AuthenticatedImage
-                src={displayImageUrl}
-                alt={image.original_filename}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageError('Failed to load image')}
-                className="w-full h-full"
-              />
-            </div>
+          <div className="w-full h-full p-8 flex items-center justify-center">
+            <AuthenticatedImage
+              src={displayImageUrl}
+              alt={image.original_filename}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError('Failed to load image')}
+              className="max-w-full max-h-full object-contain"
+            />
           </div>
         )}
       </div>
 
+      {/* Histogram Panel - Side Panel */}
       {showHistogram && imageLoaded && (
-        <HistogramPanel key={currentImageId} imageId={currentImageId} />
+        <div className="w-80 border-l bg-background overflow-auto flex-shrink-0">
+          <HistogramPanel key={currentImageId} imageId={currentImageId} />
+        </div>
       )}
     </div>
   )

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { PageLayout } from "@/components/layout/page-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,8 +13,10 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { formatDistanceToNow } from "date-fns"
+import { UploadDialog } from "@/components/dashboard/upload-dialog"
 
 export default function DashboardPage() {
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const { data, isLoading, error } = useGetUserImagesQuery({ limit: 20, offset: 0, sort: "created_at" })
 
   return (
@@ -34,7 +37,7 @@ export default function DashboardPage() {
                 View Edit History
               </Button>
             </Link>
-            <Button>
+            <Button onClick={() => setUploadDialogOpen(true)}>
               <Upload className="mr-2 h-4 w-4" />
               Upload Image
             </Button>
@@ -123,7 +126,7 @@ export default function DashboardPage() {
               <p className="text-muted-foreground text-center max-w-md mb-6">
                 Upload your first image to get started with professional image processing tools.
               </p>
-              <Button>
+              <Button onClick={() => setUploadDialogOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />
                 Upload Your First Image
               </Button>
@@ -142,8 +145,8 @@ export default function DashboardPage() {
                     {/* Image */}
                     <div className="relative aspect-square bg-muted">
                       <Image
-                        src={image.url}
-                        alt={image.original_filename}
+                        src={image.url || `${process.env.NEXT_PUBLIC_API_URL}/images/${image.id}/download`}
+                        alt={image.original_filename || 'Image'}
                         fill
                         className="object-cover"
                       />
@@ -163,7 +166,7 @@ export default function DashboardPage() {
                     {/* Info */}
                     <div className="p-4">
                       <h3 className="font-medium truncate mb-1">
-                        {image.original_filename}
+                        {image.original_filename || 'Untitled'}
                       </h3>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>{image.width} × {image.height}</span>
@@ -177,6 +180,9 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Upload Dialog */}
+      <UploadDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} />
     </PageLayout>
   )
 }

@@ -25,21 +25,23 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
+  const code = request.nextUrl.searchParams.get('code')
+  if (code && request.nextUrl.pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/callback'
+    return NextResponse.redirect(url)
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  console.log("MIDDLEWARE USER:", user)
-  console.log("MIDDLEWARE PATHNAME:", request.nextUrl.pathname)
-
-  // Protect /dashboard and /editor routes
   if (!user && (request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/editor"))) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from auth pages (except callback)
   if (
     user &&
     (request.nextUrl.pathname.startsWith("/auth/login") || 

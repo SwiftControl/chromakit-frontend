@@ -13,6 +13,13 @@ import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { useState } from "react"
 
+function formatOperation(op: string) {
+  return op
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
 export default function HistoryPage() {
   const [limit] = useState(50)
   const [offset] = useState(0)
@@ -97,7 +104,7 @@ export default function HistoryPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{data.total}</div>
+                  <div className="text-2xl font-bold">{data.total || data.history.length}</div>
                 </CardContent>
               </Card>
               <Card>
@@ -133,8 +140,8 @@ export default function HistoryPage() {
                     <div className="flex-shrink-0">
                       <div className="relative h-24 w-24 rounded-lg overflow-hidden bg-muted border">
                         <Image
-                          src={`${process.env.NEXT_PUBLIC_API_URL}/images/${item.image_id}/download`}
-                          alt={item.original_image.original_filename}
+                          src={item.image.url || `${process.env.NEXT_PUBLIC_API_URL}/images/${item.image.id}/download`}
+                          alt={`Image ${item.image_id}`}
                           fill
                           className="object-cover"
                         />
@@ -146,29 +153,31 @@ export default function HistoryPage() {
                       <div className="flex items-start justify-between gap-4 mb-2">
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-lg truncate">
-                            {item.original_image.original_filename}
+                            {formatOperation(item.operation)}
                           </h3>
                           <p className="text-sm text-muted-foreground">
                             {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
                           </p>
                         </div>
-                        <OperationBadge operation={item.operation_type} />
+                        <OperationBadge operation={item.operation} />
                       </div>
 
                       {/* Parameters */}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {Object.entries(item.parameters).map(([key, value]) => (
-                          <span
-                            key={key}
-                            className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded"
-                          >
-                            <span className="font-medium">{key}:</span>
-                            <span className="text-muted-foreground">
-                              {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                      {item.params && Object.keys(item.params).length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {Object.entries(item.params).map(([key, value]) => (
+                            <span
+                              key={key}
+                              className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded"
+                            >
+                              <span className="font-medium">{key}:</span>
+                              <span className="text-muted-foreground">
+                                {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                              </span>
                             </span>
-                          </span>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
@@ -190,7 +199,7 @@ export default function HistoryPage() {
             ))}
 
             {/* Pagination info */}
-            {data.total > data.history.length && (
+            {data.total && data.total > data.history.length && (
               <div className="text-center py-4 text-sm text-muted-foreground">
                 Showing {data.history.length} of {data.total} operations
               </div>
@@ -206,8 +215,13 @@ function OperationBadge({ operation }: { operation: string }) {
   const operationColors: Record<string, string> = {
     brightness: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
     contrast: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
+    log_contrast: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
+    exp_contrast: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
     channel: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20",
     grayscale: "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20",
+    grayscale_luminosity: "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20",
+    grayscale_average: "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20",
+    grayscale_midgray: "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20",
     negative: "bg-pink-500/10 text-pink-700 dark:text-pink-400 border-pink-500/20",
     binarize: "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20",
     translate: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
@@ -216,13 +230,7 @@ function OperationBadge({ operation }: { operation: string }) {
     reduce_resolution: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
     enlarge_region: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
     merge: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20",
-  }
-
-  const formatOperation = (op: string) => {
-    return op
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
+    edit: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
   }
 
   return (

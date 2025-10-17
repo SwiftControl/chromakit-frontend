@@ -1,5 +1,4 @@
-import { AuthState } from '@/lib/types/auth.types';
-import { ImageState } from '@/lib/types/image.types';
+import type { AuthState, ImageState } from '@/types';
 
 export interface RootState {
   auth: AuthState;

@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { BarChart3, GitCompare } from "lucide-react"
-import type { EditorState } from "@/lib/types/editor"
+import type { EditorState } from "@/types"
 
 interface EditorToolbarProps {
   editorState: EditorState

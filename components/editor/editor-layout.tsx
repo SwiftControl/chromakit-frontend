@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { EditorHeader } from "./editor-header"
 import { EditorSidebar } from "./editor-sidebar"
 import { EditorCanvas } from "./editor-canvas"
 import { EditorToolbar } from "./editor-toolbar"
 import { useToast } from "@/hooks/use-toast"
-import type { ImageData, EditorState } from "@/lib/types/editor"
+import { useDebouncedOperations } from "@/hooks/useDebouncedOperations"
+import type { ImageData, EditorState } from "@/types"
 import {
   useAdjustBrightnessMutation,
   useAdjustContrastMutation,
@@ -16,6 +17,7 @@ import {
   useBinarizeImageMutation,
   useApplyNegativeMutation,
   useRotateImageMutation,
+  useResetToOriginalMutation,
 } from "@/store/api/imageApi"
 
 interface EditorLayoutProps {
@@ -58,22 +60,45 @@ export function EditorLayout({ image, imageUrl, userId }: EditorLayoutProps) {
   const [binarizeImage] = useBinarizeImageMutation()
   const [applyNegative] = useApplyNegativeMutation()
   const [rotateImage] = useRotateImageMutation()
+  const [resetToOriginal] = useResetToOriginalMutation()
 
+  /**
+   * Returns the debounce delay in milliseconds for a given operation
+   */
+  const getDebounceDelay = useCallback((operation: string) => {
+    switch (operation) {
+      case 'brightness':
+      case 'contrast':
+      case 'rotate':
+      case 'channel':
+        return 300
+      default:
+        return 0
+    }
+  }, [])
+
+  const debouncedOps = useDebouncedOperations({
+    getDelay: getDebounceDelay,
+    isProcessing,
+  })
+
+  /**
+   * Updates the editor state and adds the change to history
+   */
   const updateState = (updates: Partial<EditorState>) => {
     const newState = { ...editorState, ...updates }
     setEditorState(newState)
 
-    // Add to history
     const newHistory = history.slice(0, historyIndex + 1)
     newHistory.push(newState)
     setHistory(newHistory)
     setHistoryIndex(newHistory.length - 1)
   }
 
-  // Process image operations - Updated to handle ProcessingOperationResponse
-  const processImage = async (operation: string, params: any) => {
-    if (isProcessing) return
-
+  /**
+   * Executes an image processing operation and handles the response
+   */
+  const executeOperation = useCallback(async (operation: string, params: any) => {
     setIsProcessing(true)
     try {
       let result
@@ -82,59 +107,65 @@ export function EditorLayout({ image, imageUrl, userId }: EditorLayoutProps) {
         case 'brightness':
           result = await adjustBrightness({
             image_id: currentImageId,
-            factor: params.factor
+            factor: params.factor,
           }).unwrap()
           break
         case 'contrast':
           result = await adjustContrast({
             image_id: currentImageId,
             type: params.type,
-            intensity: params.intensity
+            intensity: params.intensity,
           }).unwrap()
           break
         case 'channel':
           result = await adjustChannel({
             image_id: currentImageId,
             channel: params.channel,
-            enabled: params.enabled
+            enabled: params.enabled,
           }).unwrap()
           break
         case 'grayscale':
           result = await convertToGrayscale({
             image_id: currentImageId,
-            method: params.method
+            method: params.method,
           }).unwrap()
           break
         case 'binarize':
           result = await binarizeImage({
             image_id: currentImageId,
-            threshold: params.threshold
+            threshold: params.threshold,
           }).unwrap()
           break
         case 'negative':
           result = await applyNegative({
-            image_id: currentImageId
+            image_id: currentImageId,
           }).unwrap()
           break
         case 'rotate':
           result = await rotateImage({
             image_id: currentImageId,
-            angle: params.angle
+            angle: params.angle,
           }).unwrap()
           break
         default:
           throw new Error(`Unknown operation: ${operation}`)
       }
 
-      // All processing operations now return ProcessingOperationResponse with id and url
       if (result && result.id) {
-        // Update the current image ID to the newly processed image
+        console.log('Operation result:', result) // Debug log
         setCurrentImageId(result.id)
+        
+        // The API returns a URL in the format: /images/{id}/download
+        // We need to convert it to the full URL
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const fullUrl = result.url.startsWith('http') 
+          ? result.url 
+          : `${apiUrl}${result.url}`
+        
+        console.log('Setting image URL:', fullUrl) // Debug log
+        setCurrentImageUrl(fullUrl)
 
-        // Update the current image URL if provided by the API
-        if (result.url) {
-          setCurrentImageUrl(result.url)
-        }
+        debouncedOps.onOperationComplete(operation, params)
 
         toast({
           title: "Success",
@@ -145,13 +176,35 @@ export function EditorLayout({ image, imageUrl, userId }: EditorLayoutProps) {
       console.error('Processing error:', error)
       toast({
         title: "Error",
-        description: error.data?.detail || `Failed to apply ${operation}`,
+        description: error?.data?.detail || `Failed to apply ${operation}`,
         variant: "destructive",
       })
     } finally {
       setIsProcessing(false)
     }
-  }
+  }, [
+    currentImageId,
+    adjustBrightness,
+    adjustContrast,
+    adjustChannel,
+    convertToGrayscale,
+    binarizeImage,
+    applyNegative,
+    rotateImage,
+    toast,
+    debouncedOps,
+  ])
+
+  debouncedOps.setExecutor(executeOperation)
+
+  /**
+   * Schedules an image processing operation with debouncing and de-duplication
+   * @param operation - The type of operation to perform
+   * @param params - The parameters for the operation
+   */
+  const processImage = useCallback(async (operation: string, params: any) => {
+    debouncedOps.scheduleOperation(operation, params)
+  }, [debouncedOps])
 
   const undo = () => {
     if (historyIndex > 0) {
@@ -167,23 +220,66 @@ export function EditorLayout({ image, imageUrl, userId }: EditorLayoutProps) {
     }
   }
 
-  const reset = () => {
-    const initialState: EditorState = {
-      brightness: 0,
-      contrast: 0,
-      rotation: 0,
-      scale: 1,
-      flipHorizontal: false,
-      flipVertical: false,
-      filter: "none",
-      showRed: true,
-      showGreen: true,
-      showBlue: true,
-      showHistogram: false,
-      compareMode: false,
+  const reset = async () => {
+    try {
+      setIsProcessing(true)
+      
+      // Call the reset API endpoint to get the original image
+      const result = await resetToOriginal({
+        image_id: currentImageId,
+      }).unwrap()
+
+      if (result && result.id) {
+        console.log('Reset result:', result)
+        
+        // Update to the original image
+        setCurrentImageId(result.id)
+        
+        // Build full URL for the reset image
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const fullUrl = result.url.startsWith('http') 
+          ? result.url 
+          : `${apiUrl}${result.url}`
+        
+        console.log('Setting reset image URL:', fullUrl)
+        setCurrentImageUrl(fullUrl)
+
+        // Reset editor state to defaults
+        const initialState: EditorState = {
+          brightness: 0,
+          contrast: 0,
+          rotation: 0,
+          scale: 1,
+          flipHorizontal: false,
+          flipVertical: false,
+          filter: "none",
+          showRed: true,
+          showGreen: true,
+          showBlue: true,
+          showHistogram: false,
+          compareMode: false,
+        }
+        
+        // Reset history
+        setHistory([initialState])
+        setHistoryIndex(0)
+        setEditorState(initialState)
+
+        toast({
+          title: "Success",
+          description: "Image reset to original version",
+        })
+      }
+    } catch (error: any) {
+      console.error('Reset error:', error)
+      toast({
+        title: "Error",
+        description: error?.data?.detail || "Failed to reset image",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
     }
-    setCurrentImageId(originalImageId) // Reset to original image
-    updateState(initialState)
   }
 
   return (
@@ -217,6 +313,7 @@ export function EditorLayout({ image, imageUrl, userId }: EditorLayoutProps) {
             currentImageUrl={currentImageUrl}
             originalImageId={originalImageId}
             editorState={editorState}
+            isProcessing={isProcessing}
           />
         </main>
       </div>

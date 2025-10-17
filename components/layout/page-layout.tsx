@@ -16,7 +16,6 @@ export function PageLayout({
   headerVariant = "public",
   showFooter,
 }: PageLayoutProps) {
-  // Only show footer for public/guest pages by default
   const shouldShowFooter = showFooter !== undefined
     ? showFooter
     : headerVariant === "public" || headerVariant === "minimal"

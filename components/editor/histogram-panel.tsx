@@ -87,11 +87,11 @@ export function HistogramPanel({ imageId }: HistogramPanelProps) {
 
   if (error) {
     return (
-      <aside className="w-80 border-l border-border bg-card p-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
+      <div className="p-4 h-full">
+        <Card className="h-full">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
               Histogram
             </CardTitle>
           </CardHeader>
@@ -107,54 +107,61 @@ export function HistogramPanel({ imageId }: HistogramPanelProps) {
             </div>
           </CardContent>
         </Card>
-      </aside>
+      </div>
     )
   }
 
   return (
-    <aside className="w-80 border-l border-border bg-card p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
+    <div className="p-4 h-full">
+      <Card className="h-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
             Histogram
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : (
+          ) : histogramData ? (
             <>
-              <canvas ref={histogramCanvasRef} className="w-full border rounded" />
-              <div className="mt-4 space-y-2 text-xs">
+              <div className="bg-muted/30 rounded-lg p-3 border">
+                <canvas ref={histogramCanvasRef} className="w-full" />
+              </div>
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Channels</h4>
                 {'gray' in histogramData.histogram ? (
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 bg-gray-500/70" />
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="h-4 w-4 rounded bg-gray-500/70 border" />
                     <span className="text-muted-foreground">Intensity</span>
                   </div>
                 ) : (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 bg-red-500/50" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="h-4 w-4 rounded bg-red-500/50 border border-red-500/30" />
                       <span className="text-muted-foreground">Red Channel</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 bg-green-500/50" />
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="h-4 w-4 rounded bg-green-500/50 border border-green-500/30" />
                       <span className="text-muted-foreground">Green Channel</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 bg-blue-500/50" />
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="h-4 w-4 rounded bg-blue-500/50 border border-blue-500/30" />
                       <span className="text-muted-foreground">Blue Channel</span>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             </>
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-sm text-muted-foreground">No histogram data available</p>
+            </div>
           )}
         </CardContent>
       </Card>
-    </aside>
+    </div>
   )
 }

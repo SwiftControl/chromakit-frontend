@@ -1,9 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { createClient } from '@/lib/supabase/client';
-import type { RootState } from '../index';
-import {
+import type {
   ImageMetadata,
-  ImageListResponse,
   UploadImageResponse,
   DeleteImageResponse,
   ProcessingOperationResponse,
@@ -19,11 +17,10 @@ import {
   ReduceResolutionParams,
   EnlargeRegionParams,
   MergeParams,
+  ResetParams,
   HistogramData,
-  ListHistoryResponse,
   DeleteHistoryResponse,
-  EditHistoryResponse,
-} from '@/lib/types/image.types';
+} from '@/types';
 
 const baseQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
@@ -214,6 +211,15 @@ export const imageApi = createApi({
       invalidatesTags: (result) => result ? ['ImageList', 'History', { type: 'Image', id: result.id }] : ['ImageList', 'History'],
     }),
 
+    resetToOriginal: builder.mutation<ProcessingOperationResponse, ResetParams>({
+      query: (params) => ({
+        url: '/processing/reset',
+        method: 'POST',
+        body: params,
+      }),
+      invalidatesTags: (result) => result ? ['ImageList', 'History', { type: 'Image', id: result.id }] : ['ImageList', 'History'],
+    }),
+
     // Get Histogram
     getHistogram: builder.query<HistogramData, string>({
       query: (imageId) => `/processing/${imageId}/histogram`,
@@ -224,17 +230,14 @@ export const imageApi = createApi({
     getEditHistory: builder.query<{
       history: Array<{
         id: string;
+        user_id: string;
         image_id: string;
-        operation_type: string;
-        parameters: Record<string, any>;
-        result_storage_path: string;
+        operation: string;
+        image: ImageMetadata;
+        params: Record<string, any>;
         created_at: string;
-        original_image: {
-          id: string;
-          original_filename: string;
-        };
       }>;
-      total: number;
+      total?: number;
     }, { limit?: number; offset?: number; image_id?: string }>({
       query: ({ limit = 50, offset = 0, image_id } = {}) => {
         const params = new URLSearchParams({
@@ -295,6 +298,7 @@ export const {
   useReduceResolutionMutation,
   useEnlargeRegionMutation,
   useMergeImagesMutation,
+  useResetToOriginalMutation,
   useGetHistogramQuery,
   useGetEditHistoryQuery,
   useGetImageHistoryQuery,

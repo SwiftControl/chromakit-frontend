@@ -6,7 +6,8 @@ import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { EditorState } from "@/lib/types/editor"
+import { useDebounce } from "@/hooks/useDebounce"
+import type { EditorState } from "@/types"
 
 interface EditorSidebarProps {
   editorState: EditorState
@@ -16,35 +17,60 @@ interface EditorSidebarProps {
 }
 
 export function EditorSidebar({ editorState, updateState, processImage, isProcessing }: EditorSidebarProps) {
-  // Handle brightness changes with API call
-  const handleBrightnessChange = async (value: number) => {
+  // Debounced API calls (300ms delay)
+  const debouncedBrightness = useDebounce((factor: number) => {
+    processImage('brightness', { factor })
+  }, 300)
+
+  const debouncedContrast = useDebounce((type: string, intensity: number) => {
+    processImage('contrast', { type, intensity })
+  }, 300)
+
+  const debouncedRotation = useDebounce((angle: number) => {
+    processImage('rotate', { angle })
+  }, 300)
+
+  const debouncedChannel = useDebounce((channel: string, enabled: boolean) => {
+    processImage('channel', { channel, enabled })
+  }, 300)
+
+  // Handle brightness changes with debounced API call
+  const handleBrightnessChange = (value: number) => {
+    // Update UI immediately
     updateState({ brightness: value })
-    if (value !== 0) {
-      // Convert from -100/100 to factor (0.0 to 2.0)
-      const factor = value >= 0 ? 1 + (value / 100) : 1 - (Math.abs(value) / 100) * 0.8
-      await processImage('brightness', { factor })
-    }
+    
+    // Convert from -100/100 to factor (0.2 to 1.5)
+    // More conservative range to prevent too bright/dark images
+    const factor = value >= 0 
+      ? 1 + (value / 200)  // Max 1.5x brighter (at value=100)
+      : 1 + (value / 125)  // Min 0.2x darker (at value=-100)
+    
+    // API call is debounced (waits 300ms after last change)
+    debouncedBrightness(factor)
   }
 
-  // Handle contrast changes with API call  
-  const handleContrastChange = async (value: number) => {
+  // Handle contrast changes with debounced API call
+  const handleContrastChange = (value: number) => {
+    // Update UI immediately
     updateState({ contrast: value })
-    if (value !== 0) {
-      const type = value > 0 ? 'exponential' : 'logarithmic'
-      const intensity = Math.abs(value) / 50 // Convert -100/100 to 0-2 range
-      await processImage('contrast', { type, intensity })
-    }
+    
+    const type = value > 0 ? 'exponential' : 'logarithmic'
+    const intensity = Math.abs(value) / 100 // Convert -100/100 to 0-1 range
+    
+    // API call is debounced (waits 300ms after last change)
+    debouncedContrast(type, intensity)
   }
 
-  // Handle rotation with API call
-  const handleRotationChange = async (value: number) => {
+  // Handle rotation with debounced API call
+  const handleRotationChange = (value: number) => {
+    // Update UI immediately
     updateState({ rotation: value })
-    if (value !== 0) {
-      await processImage('rotate', { angle: value })
-    }
+    
+    // API call is debounced (waits 300ms after last change)
+    debouncedRotation(value)
   }
 
-  // Handle filter changes with API call
+  // Handle filter changes with API call (no debounce needed - single action)
   const handleFilterChange = async (filter: string) => {
     updateState({ filter })
     
@@ -58,17 +84,21 @@ export function EditorSidebar({ editorState, updateState, processImage, isProces
       case 'binarization':
         await processImage('binarize', { threshold: 0.5 })
         break
-      // Add other filters as needed
+      case 'none':
+        // Reset to original - could implement reset functionality
+        break
     }
   }
 
-  // Handle RGB channel changes
-  const handleChannelChange = async (channel: 'red' | 'green' | 'blue', enabled: boolean) => {
+  // Handle RGB channel changes with debounced API call
+  const handleChannelChange = (channel: 'red' | 'green' | 'blue', enabled: boolean) => {
+    // Update UI immediately
     updateState({ 
       [`show${channel.charAt(0).toUpperCase() + channel.slice(1)}`]: enabled 
     } as Partial<EditorState>)
     
-    await processImage('channel', { channel, enabled })
+    // API call is debounced (waits 300ms after last change)
+    debouncedChannel(channel, enabled)
   }
   return (
     <aside className="w-80 overflow-y-auto border-r border-border bg-card">

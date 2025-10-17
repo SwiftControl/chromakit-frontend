@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Undo2, Redo2, RotateCcw, Download, Save } from "lucide-react"
 import Link from "next/link"
-import type { ImageData, EditorState } from "@/lib/types/editor"
+import type { ImageData, EditorState } from "@/types"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"

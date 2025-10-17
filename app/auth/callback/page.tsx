@@ -30,7 +30,33 @@ export default function AuthCallbackPage() {
           return
         }
 
-        // Handle the auth callback
+        // Get the authorization code from URL
+        const code = searchParams.get('code')
+        
+        if (code) {
+          // Exchange the code for a session
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+          
+          if (exchangeError) {
+            console.error('Code exchange error:', exchangeError)
+            setErrorMessage(exchangeError.message)
+            setStatus('error')
+            return
+          }
+
+          if (data.session) {
+            setStatus('success')
+            toast.success('Successfully signed in!')
+            
+            // Redirect to dashboard after a short delay
+            setTimeout(() => {
+              router.push('/dashboard')
+            }, 2000)
+            return
+          }
+        }
+
+        // Fallback: try to get existing session
         const { data, error: supabaseError } = await supabase.auth.getSession()
         
         if (supabaseError) {
@@ -58,7 +84,7 @@ export default function AuthCallbackPage() {
               router.push('/auth/login')
             }, 3000)
           } else {
-            setErrorMessage('No active session found')
+            setErrorMessage('No active session found. Please try signing in again.')
             setStatus('error')
           }
         }

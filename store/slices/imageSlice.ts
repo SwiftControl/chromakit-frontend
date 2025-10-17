@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { ImageState, EditHistory } from '@/lib/types/image.types';
+import type { ImageState, HistoryItem } from '@/types';
 
 const initialState: ImageState = {
   currentImageId: null,
@@ -30,7 +30,7 @@ const imageSlice = createSlice({
     setCurrentOperation: (state, action: PayloadAction<string | null>) => {
       state.currentOperation = action.payload;
     },
-    addOperation: (state, action: PayloadAction<EditHistory>) => {
+    addOperation: (state, action: PayloadAction<HistoryItem>) => {
       state.processingHistory.push(action.payload);
     },
     clearHistory: (state) => {

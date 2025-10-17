@@ -16,6 +16,85 @@ Build a professional, full-stack image processing web application that connects 
 - UI Components: Radix UI primitives with custom styling
 - Styling: Tailwind CSS with custom design system
 
+## MANDATORY
+- No in-line comments in the code snippets. Instead use JSDoc for documentation.
+- Don't write any documentation outside of JSdoc documentation. Avoid write documents with implementation guide or something like that, only write a change summary at the end of the conversation.
+
+## TYPE SYSTEM ARCHITECTURE
+
+### Centralized Types Structure
+All TypeScript types MUST be defined in the `/types` directory and imported via `@/types`:
+
+**Directory Structure:**
+```
+types/
+├── auth/index.ts           # Authentication types (User, AuthState)
+├── image/index.ts          # Image metadata and list types
+├── processing/index.ts     # All processing operation parameters
+├── histogram/index.ts      # Histogram data types
+├── editor/index.ts         # Editor state and image data
+├── forms/index.ts          # Form validation schemas
+└── index.ts                # Main barrel export (re-exports all)
+```
+
+**Import Pattern (REQUIRED):**
+```typescript
+// ✅ CORRECT - Always use @/types
+import type { User, ImageMetadata, EditorState } from '@/types';
+import type { BrightnessParams, ContrastParams } from '@/types';
+
+// ❌ WRONG - Never use old lib/types paths
+import { User } from '@/lib/types/auth.types';
+import { ImageMetadata } from '@/lib/types/image.types';
+```
+
+**Key Type Categories:**
+
+1. **Authentication Types** (`@/types` - from auth/)
+   - `User`: User profile data
+   - `AuthState`: Redux auth slice state
+   - `ProfileUpdateRequest`: Profile update payload
+
+2. **Image Types** (`@/types` - from image/)
+   - `ImageMetadata`: Complete image metadata
+   - `ImageListResponse`: Paginated image list
+   - `HistoryItem`: Edit history record
+   - `ImageState`: Redux image slice state
+
+3. **Processing Types** (`@/types` - from processing/)
+   - `ProcessingOperationResponse`: Generic processing response
+   - `BrightnessParams`, `ContrastParams`, `ChannelParams`
+   - `GrayscaleParams`, `BinarizeParams`, `NegativeParams`
+   - `RotateParams`, `CropParams`, `TranslateParams`
+   - `ReduceResolutionParams`, `EnlargeRegionParams`, `MergeParams`
+
+4. **Editor Types** (`@/types` - from editor/)
+   - `EditorState`: Current editor settings
+   - `ImageData`: Image data for editor
+
+5. **Histogram Types** (`@/types` - from histogram/)
+   - `HistogramData`: Histogram data (color or grayscale)
+   - `HistogramResponseColor`: RGB histogram
+   - `HistogramResponseGrayscale`: Grayscale histogram
+
+6. **Form Types** (`@/types` - from forms/)
+   - `UploadFormData`: File upload validation
+   - `TransformFormData`: Transformation parameters
+
+**Benefits:**
+- ✅ Single source of truth - No duplicate type definitions
+- ✅ Easy imports - Just use `@/types` everywhere
+- ✅ Tree-shakeable - Only imports what you use
+- ✅ Organized by domain - Clear separation of concerns
+- ✅ Type safety - Compile-time checks across entire app
+
+**Rules:**
+1. Never create duplicate type definitions in component files
+2. Always use `import type` for type-only imports
+3. Use `@/types` alias, never relative paths to types folder
+4. Add new types to appropriate domain folder in `/types`
+5. Update barrel export (`types/index.ts`) when adding new types
+
 ## AUTHENTICATION & SECURITY REQUIREMENTS
 
 ### OAuth Integration

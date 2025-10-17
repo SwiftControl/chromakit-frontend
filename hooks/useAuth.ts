@@ -60,10 +60,19 @@ export const useAuth = () => {
   }, [dispatch, supabase]);
 
   const signInWithGoogle = async () => {
+    const getRedirectUrl = () => {
+      if (typeof window !== 'undefined') {
+        return `${window.location.origin}/auth/callback`;
+      }
+      return process.env.NEXT_PUBLIC_APP_URL 
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
+        : 'http://localhost:3000/auth/callback';
+    };
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: getRedirectUrl(),
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -74,10 +83,19 @@ export const useAuth = () => {
   };
 
   const signInWithFacebook = async () => {
+    const getRedirectUrl = () => {
+      if (typeof window !== 'undefined') {
+        return `${window.location.origin}/auth/callback`;
+      }
+      return process.env.NEXT_PUBLIC_APP_URL 
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
+        : 'http://localhost:3000/auth/callback';
+    };
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'facebook',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: getRedirectUrl(),
         scopes: 'email',
       },
     });
@@ -93,11 +111,20 @@ export const useAuth = () => {
   };
 
   const signUp = async (email: string, password: string) => {
+    const getRedirectUrl = () => {
+      if (typeof window !== 'undefined') {
+        return `${window.location.origin}/auth/callback?type=signup`;
+      }
+      return process.env.NEXT_PUBLIC_APP_URL 
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?type=signup`
+        : 'http://localhost:3000/auth/callback?type=signup';
+    };
+    
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
+        emailRedirectTo: getRedirectUrl(),
       },
     });
     return { error };

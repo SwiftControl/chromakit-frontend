@@ -1,10 +1,10 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { createClient } from '@/lib/supabase/client';
 import type { RootState } from '../index';
-import {
+import type {
   User,
   ProfileUpdateRequest,
-} from '@/lib/types/auth.types';
+} from '@/types';
 
 const baseQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
