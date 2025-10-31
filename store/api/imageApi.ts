@@ -24,18 +24,19 @@ import type {
 
 const baseQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
-  prepareHeaders: async (headers) => {
+  prepareHeaders: async (headers, { getState, endpoint }) => {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    
+
     if (session?.access_token) {
       headers.set('Authorization', `Bearer ${session.access_token}`);
     }
 
-    if (!headers.get('content-type')) {
+    // Don't set content-type for uploadImage endpoint - let the browser set it with the boundary
+    if (endpoint !== 'uploadImage' && !headers.get('content-type')) {
       headers.set('content-type', 'application/json');
     }
-    
+
     return headers;
   },
 });
@@ -58,11 +59,7 @@ export const imageApi = createApi({
         url: '/images/upload',
         method: 'POST',
         body: formData,
-        prepareHeaders: (headers: Headers) => {
-          // Remove content-type for FormData - let browser set it with boundary
-          headers.delete('content-type');
-          return headers;
-        },
+        formData: true,
       }),
       invalidatesTags: ['ImageList'],
     }),
