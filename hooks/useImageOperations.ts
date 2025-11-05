@@ -10,41 +10,50 @@ import {
 } from '@/store/slices/imageSlice';
 import {
   useUploadImageMutation,
-  useAdjustBrightnessMutation,
-  useAdjustContrastMutation,
-  useAdjustChannelMutation,
-  useConvertToGrayscaleMutation,
-  useBinarizeImageMutation,
-  useApplyNegativeMutation,
-  useTranslateImageMutation,
-  useRotateImageMutation,
-  useCropImageMutation,
-  useReduceResolutionMutation,
-  useEnlargeRegionMutation,
-  useMergeImagesMutation,
+  useBatchProcessingMutation,
 } from '@/store/api/imageApi';
+import type { BatchOperation } from '@/types';
 import { toast } from 'sonner';
 
+/**
+ * Custom hook for managing image processing operations.
+ * All processing operations now use the batch processing endpoint to ensure
+ * operations are applied to the root/original image, preventing cumulative degradation.
+ * 
+ * @returns Object containing image state and operation handlers
+ * 
+ * @example
+ * ```typescript
+ * const {
+ *   currentImageId,
+ *   isProcessing,
+ *   handleBrightness,
+ *   handleBatchOperations
+ * } = useImageOperations();
+ * 
+ * await handleBrightness(imageId, 1.2);
+ * 
+ * await handleBatchOperations(imageId, [
+ *   { operation: 'brightness', params: { factor: 1.2 } },
+ *   { operation: 'log_contrast', params: { k: 1.5 } }
+ * ]);
+ * ```
+ */
 export const useImageOperations = () => {
   const dispatch = useDispatch();
   const image = useSelector((state: RootState) => state.image);
   
-  // Mutations
   const [uploadImage] = useUploadImageMutation();
-  const [adjustBrightness] = useAdjustBrightnessMutation();
-  const [adjustContrast] = useAdjustContrastMutation();
-  const [adjustChannel] = useAdjustChannelMutation();
-  const [convertToGrayscale] = useConvertToGrayscaleMutation();
-  const [binarizeImage] = useBinarizeImageMutation();
-  const [applyNegative] = useApplyNegativeMutation();
-  const [translateImage] = useTranslateImageMutation();
-  const [rotateImage] = useRotateImageMutation();
-  const [cropImage] = useCropImageMutation();
-  const [reduceResolution] = useReduceResolutionMutation();
-  const [enlargeRegion] = useEnlargeRegionMutation();
-  const [mergeImages] = useMergeImagesMutation();
+  const [batchProcessing] = useBatchProcessingMutation();
 
-  // Helper function to handle operations
+  /**
+   * Executes a processing operation with error handling and state management.
+   * Handles loading states, success/error notifications, and Redux state updates.
+   * 
+   * @param operation - Async function that performs the API call
+   * @param operationType - Human-readable name of the operation
+   * @param params - Operation parameters for tracking
+   */
   const executeOperation = async (
     operation: () => Promise<any>,
     operationType: string,
@@ -61,15 +70,11 @@ export const useImageOperations = () => {
         dispatch(setCurrentImage(result.data.id));
         dispatch(addOperation({
           id: result.data.id,
+          user_id: result.data.user_id || '',
           image_id: params.image_id || params.image1_id,
-          operation_type: operationType,
-          parameters: params,
-          result_storage_path: result.data.storage_path,
+          operation: operationType,
+          params: params,
           created_at: result.data.created_at,
-          original_image: {
-            id: params.image_id || params.image1_id,
-            original_filename: result.data.original_filename,
-          },
         }));
         toast.success(`${operationType} applied successfully`);
       }
@@ -86,7 +91,32 @@ export const useImageOperations = () => {
     }
   };
 
-  // Upload operation
+  /**
+   * Executes a batch of operations using the unified batch processing endpoint.
+   * All operations are applied to the root/original image to prevent cumulative degradation.
+   * 
+   * @param imageId - ID of the image to process (root will be found automatically)
+   * @param operations - Array of operations to apply sequentially
+   * @param operationName - Display name for the batch operation
+   */
+  const executeBatchOperation = async (
+    imageId: string,
+    operations: BatchOperation[],
+    operationName: string
+  ) => {
+    return executeOperation(
+      () => batchProcessing({ image_id: imageId, operations }),
+      operationName,
+      { image_id: imageId, operations }
+    );
+  };
+
+  /**
+   * Uploads an image file to the server.
+   * 
+   * @param file - Image file to upload (JPG, PNG, or BMP, max 10MB)
+   * @returns Promise resolving to upload response
+   */
   const handleUploadImage = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -98,89 +128,205 @@ export const useImageOperations = () => {
     );
   };
 
-  // Processing operations
+  /**
+   * Adjusts image brightness using the batch processing endpoint.
+   * 
+   * @param imageId - ID of the image to process
+   * @param factor - Brightness multiplier (>1.0 = brighter, <1.0 = darker)
+   */
   const handleBrightness = (imageId: string, factor: number) =>
-    executeOperation(
-      () => adjustBrightness({ image_id: imageId, factor }),
-      'brightness',
-      { image_id: imageId, factor }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'brightness', params: { factor } }],
+      'brightness'
     );
 
+  /**
+   * Adjusts image contrast using logarithmic or exponential methods.
+   * 
+   * @param imageId - ID of the image to process
+   * @param type - Contrast type ('logarithmic' compresses, 'exponential' expands)
+   * @param intensity - Contrast intensity factor
+   */
   const handleContrast = (imageId: string, type: 'logarithmic' | 'exponential', intensity: number) =>
-    executeOperation(
-      () => adjustContrast({ image_id: imageId, type, intensity }),
-      'contrast',
-      { image_id: imageId, type, intensity }
+    executeBatchOperation(
+      imageId,
+      [{ operation: type === 'logarithmic' ? 'log_contrast' : 'exp_contrast', params: { k: intensity } }],
+      'contrast'
     );
 
-  const handleChannel = (imageId: string, channel: string, enabled: boolean) =>
-    executeOperation(
-      () => adjustChannel({ image_id: imageId, channel: channel as any, enabled }),
-      'channel',
-      { image_id: imageId, channel, enabled }
+  /**
+   * Enables or disables a specific color channel (RGB or CMY).
+   * 
+   * @param imageId - ID of the image to process
+   * @param channel - Channel name ('red', 'green', 'blue', 'cyan', 'magenta', 'yellow')
+   * @param enabled - Whether to enable (true) or disable (false) the channel
+   */
+  const handleChannel = (imageId: string, channel: string, enabled: boolean) => {
+    const channelMap: Record<string, string> = {
+      'red': 'channel_red',
+      'green': 'channel_green',
+      'blue': 'channel_blue',
+      'cyan': 'channel_cyan',
+      'magenta': 'channel_magenta',
+      'yellow': 'channel_yellow',
+    };
+    
+    const operation = channelMap[channel] as any;
+    return executeBatchOperation(
+      imageId,
+      [{ operation, params: { enabled } }],
+      `channel_${channel}`
     );
+  };
 
+  /**
+   * Converts image to grayscale using specified method.
+   * 
+   * @param imageId - ID of the image to process
+   * @param method - Conversion method ('average', 'luminosity', or 'midgray')
+   */
   const handleGrayscale = (imageId: string, method: 'average' | 'luminosity' | 'midgray') =>
-    executeOperation(
-      () => convertToGrayscale({ image_id: imageId, method }),
-      'grayscale',
-      { image_id: imageId, method }
+    executeBatchOperation(
+      imageId,
+      [{ operation: `grayscale_${method}` as any, params: {} }],
+      'grayscale'
     );
 
+  /**
+   * Converts image to pure black and white based on threshold.
+   * 
+   * @param imageId - ID of the image to process
+   * @param threshold - Threshold value (0.0 to 1.0)
+   */
   const handleBinarize = (imageId: string, threshold: number) =>
-    executeOperation(
-      () => binarizeImage({ image_id: imageId, threshold }),
-      'binarize',
-      { image_id: imageId, threshold }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'binarize', params: { threshold } }],
+      'binarize'
     );
 
+  /**
+   * Applies negative/invert filter to the image.
+   * 
+   * @param imageId - ID of the image to process
+   */
   const handleNegative = (imageId: string) =>
-    executeOperation(
-      () => applyNegative({ image_id: imageId }),
-      'negative',
-      { image_id: imageId }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'invert', params: {} }],
+      'negative'
     );
 
+  /**
+   * Translates (moves) the image by specified offsets.
+   * 
+   * @param imageId - ID of the image to process
+   * @param dx - Horizontal offset in pixels (positive = right, negative = left)
+   * @param dy - Vertical offset in pixels (positive = down, negative = up)
+   */
   const handleTranslate = (imageId: string, dx: number, dy: number) =>
-    executeOperation(
-      () => translateImage({ image_id: imageId, dx, dy }),
-      'translate',
-      { image_id: imageId, dx, dy }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'translate', params: { dx, dy } }],
+      'translate'
     );
 
+  /**
+   * Rotates the image by specified angle.
+   * 
+   * @param imageId - ID of the image to process
+   * @param angle - Rotation angle in degrees (positive = counter-clockwise)
+   */
   const handleRotate = (imageId: string, angle: number) =>
-    executeOperation(
-      () => rotateImage({ image_id: imageId, angle }),
-      'rotate',
-      { image_id: imageId, angle }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'rotate', params: { angle } }],
+      'rotate'
     );
 
+  /**
+   * Crops the image to specified rectangular region.
+   * 
+   * @param imageId - ID of the image to process
+   * @param x_start - Left boundary (0-indexed)
+   * @param x_end - Right boundary (exclusive)
+   * @param y_start - Top boundary (0-indexed)
+   * @param y_end - Bottom boundary (exclusive)
+   */
   const handleCrop = (imageId: string, x_start: number, x_end: number, y_start: number, y_end: number) =>
-    executeOperation(
-      () => cropImage({ image_id: imageId, x_start, x_end, y_start, y_end }),
-      'crop',
-      { image_id: imageId, x_start, x_end, y_start, y_end }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'crop', params: { x_start, x_end, y_start, y_end } }],
+      'crop'
     );
 
+  /**
+   * Reduces image resolution by specified factor.
+   * 
+   * @param imageId - ID of the image to process
+   * @param factor - Reduction factor (2 = half size, 3 = one-third, etc.)
+   */
   const handleReduceResolution = (imageId: string, factor: number) =>
-    executeOperation(
-      () => reduceResolution({ image_id: imageId, factor }),
-      'reduce_resolution',
-      { image_id: imageId, factor }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'reduce_resolution', params: { factor } }],
+      'reduce_resolution'
     );
 
+  /**
+   * Extracts and enlarges a specific region of the image.
+   * 
+   * @param imageId - ID of the image to process
+   * @param x_start - Left boundary of region
+   * @param x_end - Right boundary of region
+   * @param y_start - Top boundary of region
+   * @param y_end - Bottom boundary of region
+   * @param zoom_factor - Zoom multiplier (1-10)
+   */
   const handleEnlargeRegion = (imageId: string, x_start: number, x_end: number, y_start: number, y_end: number, zoom_factor: number) =>
-    executeOperation(
-      () => enlargeRegion({ image_id: imageId, x_start, x_end, y_start, y_end, zoom_factor }),
-      'enlarge_region',
-      { image_id: imageId, x_start, x_end, y_start, y_end, zoom_factor }
+    executeBatchOperation(
+      imageId,
+      [{ operation: 'enlarge_region', params: { x_start, x_end, y_start, y_end, factor: zoom_factor } }],
+      'enlarge_region'
     );
 
+  /**
+   * Merges two images together with specified transparency.
+   * 
+   * @param image1Id - ID of the first (base) image
+   * @param image2Id - ID of the second image to blend
+   * @param transparency - Blend factor (0.0 = only first image, 1.0 = second dominates)
+   */
   const handleMergeImages = (image1Id: string, image2Id: string, transparency: number) =>
-    executeOperation(
-      () => mergeImages({ image1_id: image1Id, image2_id: image2Id, transparency }),
-      'merge',
-      { image1_id: image1Id, image2_id: image2Id, transparency }
+    executeBatchOperation(
+      image1Id,
+      [{ operation: 'merge_images', params: { other_image_id: image2Id, transparency } }],
+      'merge'
+    );
+
+  /**
+   * Executes multiple operations in a single batch request.
+   * All operations are applied to the root/original image sequentially.
+   * This is the recommended approach for applying multiple transformations.
+   * 
+   * @param imageId - ID of the image to process
+   * @param operations - Array of operations to apply
+   * 
+   * @example
+   * ```typescript
+   * await handleBatchOperations(imageId, [
+   *   { operation: 'brightness', params: { factor: 1.2 } },
+   *   { operation: 'log_contrast', params: { k: 1.5 } },
+   *   { operation: 'grayscale_luminosity', params: {} }
+   * ]);
+   * ```
+   */
+  const handleBatchOperations = (imageId: string, operations: BatchOperation[]) =>
+    executeBatchOperation(
+      imageId,
+      operations,
+      'batch_process'
     );
 
   return {
@@ -198,5 +344,6 @@ export const useImageOperations = () => {
     handleReduceResolution,
     handleEnlargeRegion,
     handleMergeImages,
+    handleBatchOperations,
   };
 };

@@ -20,6 +20,8 @@ import type {
   ResetParams,
   HistogramData,
   DeleteHistoryResponse,
+  BatchProcessingParams,
+  BatchProcessingResponse,
 } from '@/types';
 
 const baseQuery = fetchBaseQuery({
@@ -100,6 +102,15 @@ export const imageApi = createApi({
     }),
 
     // Image Processing Operations - All return ProcessingOperationResponse
+    batchProcessing: builder.mutation<BatchProcessingResponse, BatchProcessingParams>({
+      query: (params) => ({
+        url: '/processing/batch',
+        method: 'POST',
+        body: params,
+      }),
+      invalidatesTags: (result) => result ? ['ImageList', 'History', { type: 'Image', id: result.id }] : ['ImageList', 'History'],
+    }),
+
     adjustBrightness: builder.mutation<ProcessingOperationResponse, BrightnessParams>({
       query: (params) => ({
         url: '/processing/brightness',
@@ -283,6 +294,7 @@ export const {
   useGetImageQuery,
   useGetImageUrlQuery,
   useDeleteImageMutation,
+  useBatchProcessingMutation,
   useAdjustBrightnessMutation,
   useAdjustContrastMutation,
   useAdjustChannelMutation,
