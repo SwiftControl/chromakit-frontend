@@ -19,7 +19,6 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        // Check if there's an error in the URL params
         const error = searchParams.get('error')
         const errorDescription = searchParams.get('error_description')
         
@@ -30,38 +29,11 @@ export default function AuthCallbackPage() {
           return
         }
 
-        // Get the authorization code from URL
-        const code = searchParams.get('code')
+        const { data, error: sessionError } = await supabase.auth.getSession()
         
-        if (code) {
-          // Exchange the code for a session
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-          
-          if (exchangeError) {
-            console.error('Code exchange error:', exchangeError)
-            setErrorMessage(exchangeError.message)
-            setStatus('error')
-            return
-          }
-
-          if (data.session) {
-            setStatus('success')
-            toast.success('Successfully signed in!')
-            
-            // Redirect to dashboard after a short delay
-            setTimeout(() => {
-              router.push('/dashboard')
-            }, 2000)
-            return
-          }
-        }
-
-        // Fallback: try to get existing session
-        const { data, error: supabaseError } = await supabase.auth.getSession()
-        
-        if (supabaseError) {
-          console.error('Supabase Auth Error:', supabaseError)
-          setErrorMessage(supabaseError.message)
+        if (sessionError) {
+          console.error('Session Error:', sessionError)
+          setErrorMessage(sessionError.message)
           setStatus('error')
           return
         }
@@ -69,13 +41,10 @@ export default function AuthCallbackPage() {
         if (data.session) {
           setStatus('success')
           toast.success('Successfully signed in!')
-          
-          // Redirect to dashboard after a short delay
           setTimeout(() => {
             router.push('/dashboard')
           }, 2000)
         } else {
-          // No session found, might be a confirmation email callback
           const type = searchParams.get('type')
           if (type === 'signup') {
             setStatus('success')
@@ -95,7 +64,21 @@ export default function AuthCallbackPage() {
       }
     }
 
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setStatus('success')
+        toast.success('Successfully signed in!')
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 2000)
+      }
+    })
+
     handleAuthCallback()
+
+    return () => {
+      authListener.subscription.unsubscribe()
+    }
   }, [router, searchParams, supabase.auth])
 
   const renderContent = () => {
